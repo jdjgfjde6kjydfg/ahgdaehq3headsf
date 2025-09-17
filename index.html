@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Clash Royale Clone (Canvas Graphics)</title>
+  <title>Mini Clash Royale Advanced</title>
   <style>
     body { margin: 0; background: #1e272e; overflow: hidden; }
     canvas { background: #2f3640; display: block; margin: 0 auto; }
@@ -17,13 +17,13 @@
     .card {
       width: 80px; height: 100px;
       background: #333; color: white;
-      display: flex; align-items: center; justify-content: center;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
       font-family: Arial, sans-serif;
       border: 2px solid white;
       border-radius: 10px;
       cursor: grab;
       user-select: none;
-      position: relative;
     }
     .icon {
       width: 60px; height: 60px;
@@ -33,166 +33,55 @@
   </style>
 </head>
 <body>
-<canvas id="game" width="800" height="500"></canvas>
+<canvas id="game" width="500" height="700"></canvas>
 <div id="ui"></div>
 
 <script>
-// ----- Setup -----
+// Setup
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const ui = document.getElementById("ui");
 
-let playerTower = { x: 30, y: 200, hp: 300 };
-let enemyTower = { x: 720, y: 200, hp: 300 };
 let units = [];
+let projectiles = [];
 let elixir = 5;
 let gameOver = false;
 
-// Card/unit data
-const deck = [
-  {name:"Knight", cost:3, hp:50, speed:1, dmg:0.2, color:"#3498db"},
-  {name:"Archer", cost:2, hp:20, speed:1.2, dmg:0.15, color:"#e67e22"},
-  {name:"Tank", cost:5, hp:120, speed:0.6, dmg:0.3, color:"#9b59b6"},
-  {name:"Mini", cost:1, hp:10, speed:1.5, dmg:0.1, color:"#2ecc71"}
-];
-
-// UI cards
-function refreshCards() {
-  ui.innerHTML = "";
-  deck.forEach(card => {
-    const div = document.createElement("div");
-    div.className = "card";
-    div.innerHTML = `
-      <div class="icon" style="background:${card.color}"></div>
-      <div>${card.name} (${card.cost})</div>
-    `;
-    div.draggable = true;
-    div.addEventListener("dragstart", e => {
-      e.dataTransfer.setData("card", JSON.stringify(card));
-    });
-    ui.appendChild(div);
-  });
-}
-refreshCards();
-
-canvas.addEventListener("dragover", e => e.preventDefault());
-canvas.addEventListener("drop", e => {
-  e.preventDefault();
-  if (gameOver) return;
-  const card = JSON.parse(e.dataTransfer.getData("card"));
-  if (elixir < card.cost) return;
-  elixir -= card.cost;
-  spawnUnit("player", card, e.offsetX, e.offsetY);
-});
-
-// Unit class
-class Unit {
-  constructor(x, y, side, card) {
+// Towers
+class Tower {
+  constructor(x, y, hp, side, isKing=false) {
     this.x = x; this.y = y;
-    this.hp = card.hp;
-    this.dmg = card.dmg;
-    this.speed = side === "player" ? card.speed : -card.speed;
-    this.side = side;
-    this.card = card;
-  }
-  update() {
-    if (gameOver) return;
-    if (this.side === "player" && this.x < enemyTower.x - 40) this.x += this.speed;
-    else if (this.side === "enemy" && this.x > playerTower.x + 40) this.x += this.speed;
-    else this.attackTower();
-  }
-  attackTower() {
-    if (this.side === "player") enemyTower.hp -= this.dmg;
-    else playerTower.hp -= this.dmg;
+    this.hp = hp; this.side = side;
+    this.isKing = isKing;
+    this.range = isKing ? 150 : 120;
+    this.dmg = isKing ? 0.25 : 0.15;
+    this.cooldown = 0;
   }
   draw() {
     ctx.save();
     ctx.translate(this.x, this.y);
-    ctx.fillStyle = this.card.color;
-
-    switch(this.card.name) {
-      case "Knight":
-        ctx.beginPath(); ctx.arc(0,0,15,0,Math.PI*2); ctx.fill(); // body
-        ctx.fillStyle="silver"; ctx.fillRect(-20,-10,10,20); // shield
-        break;
-      case "Archer":
-        ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2); ctx.fill(); // body
-        ctx.strokeStyle="black"; ctx.beginPath(); ctx.moveTo(10,-10); ctx.lineTo(-10,10); ctx.stroke(); // bow
-        break;
-      case "Tank":
-        ctx.fillRect(-20,-15,40,30); // big rectangle
-        ctx.fillStyle="gray"; ctx.fillRect(-25,-20,50,5); // armor bar
-        break;
-      case "Mini":
-        ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill(); // small body
-        break;
+    ctx.fillStyle = this.side==="blue" ? "#2980b9" : "#c0392b";
+    ctx.fillRect(-20,-20,40,40);
+    if (this.isKing) {
+      ctx.fillStyle="gold"; ctx.fillRect(-10,-30,20,10);
     }
-
     ctx.restore();
+
+    // HP bar
+    ctx.fillStyle="red";
+    ctx.fillRect(this.x-20,this.y-30,40,5);
+    ctx.fillStyle="lime";
+    ctx.fillRect(this.x-20,this.y-30,40*(this.hp/300),5);
   }
-}
-
-function spawnUnit(side, card, x=0, y=250) {
-  units.push(new Unit(
-    side === "player" ? x : (enemyTower.x - 40),
-    y,
-    side,
-    card
-  ));
-}
-
-// AI
-function enemyAI() {
-  if (gameOver) return;
-  const card = deck[Math.floor(Math.random()*deck.length)];
-  spawnUnit("enemy", card, enemyTower.x - 40, 250);
-  setTimeout(enemyAI, 2000 + Math.random()*2000);
-}
-enemyAI();
-
-// Elixir regen
-setInterval(() => {
-  if (!gameOver && elixir < 10) elixir += 0.2;
-}, 200);
-
-// Draw towers
-function drawTower(tower, color) {
-  let grad = ctx.createLinearGradient(tower.x, tower.y, tower.x, tower.y+100);
-  grad.addColorStop(0, color);
-  grad.addColorStop(1, "#222");
-  ctx.fillStyle = grad;
-  ctx.fillRect(tower.x, tower.y, 50, 100);
-
-  ctx.fillStyle="black";
-  ctx.fillRect(tower.x+10, tower.y-20, 30, 20); // roof
-  ctx.fillStyle="gold";
-  ctx.fillRect(tower.x+20, tower.y-30, 10, 10); // flag
-}
-
-// Game loop
-function gameLoop() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  // Towers
-  drawTower(playerTower, "#2980b9");
-  drawTower(enemyTower, "#c0392b");
-
-  // HP & Elixir
-  ctx.fillStyle="white"; ctx.font="16px Arial";
-  ctx.fillText("Player HP: " + Math.max(0, Math.floor(playerTower.hp)), 20, 20);
-  ctx.fillText("Enemy HP: " + Math.max(0, Math.floor(enemyTower.hp)), 620, 20);
-  ctx.fillText("Elixir: " + Math.floor(elixir), 360, 20);
-
-  // Units
-  for (let u of units) { u.update(); u.draw(); }
-
-  // Win/Lose
-  if (playerTower.hp <= 0 && !gameOver) { gameOver = true; alert("❌ You Lose!"); }
-  if (enemyTower.hp <= 0 && !gameOver) { gameOver = true; alert("🎉 You Win!"); }
-
-  requestAnimationFrame(gameLoop);
-}
-gameLoop();
-</script>
-</body>
-</html>
+  update() {
+    if (this.hp<=0) return;
+    this.cooldown--;
+    if (this.cooldown<=0) {
+      // find nearest enemy unit
+      let target = units.find(u =>
+        u.side!==this.side &&
+        Math.hypot(u.x-this.x,u.y-this.y)<this.range
+      );
+      if (target) {
+        projectiles.push(new Projectile(this.x,this.y,target,this.dmg,this.side));
+        this.coo
